@@ -1,4 +1,6 @@
 # BME680 Kernel Driver
+<img width="225" height="225" alt="image" src="https://github.com/user-attachments/assets/2121961c-8947-4c0f-953d-a13099410ca5" />
+<img width="225" height="225" alt="image" src="https://github.com/user-attachments/assets/32c2195e-acaf-4ee9-91bc-9dad5084613a" />
 
 This is an advanced Linux kernel driver for the Bosch BME680 environmental sensor, integrated with the Industrial I/O (IIO) subsystem. It supports temperature, pressure, humidity, and gas resistance measurements over I2C, with advanced features like file operations, memory management, process management, POSIX-like threads, synchronization, and inter-process communication (IPC).
 
