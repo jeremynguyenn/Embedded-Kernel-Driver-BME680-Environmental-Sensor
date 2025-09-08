@@ -1,0 +1,30 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2711"; /* Raspberry Pi 4B */
+
+    fragment@0 {
+        target = <&i2c1>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "okay";
+
+            bme680: sensor@76 {
+                compatible = "bosch,bme680"; /* Khớp với of_device_id trong bme680.c */
+                reg = <0x76>; /* I2C address, đổi thành 0x77 nếu ADO high */
+                bosch,heater-temp = <320>; /* Heater temperature (°C) */
+                bosch,heater-duration = <150>; /* Heater duration (ms) */
+                bosch,heater-current = <10>; /* Heater current (mA) */
+                power-gpios = <&gpio 18 1>; /* GPIO18, active-high */
+                status = "okay";
+            };
+        };
+    };
+
+    /* Đảm bảo I2C1 được bật */
+    &i2c1 {
+        status = "okay";
+    };
+};
