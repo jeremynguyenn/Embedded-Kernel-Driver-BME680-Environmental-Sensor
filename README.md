@@ -270,8 +270,7 @@ For cross-compiling on a different machine (e.g., for Raspberry Pi):
 GPL-2.0
 
 ## Authors
-- Himanshu Jha (original driver)
-- Enhanced by Grok (xAI) for advanced features
+- Nguyen Nhan
 
 ## Version
 - Driver Version: 3.0.0 (as defined in `Makefile`)
