@@ -267,4 +267,8 @@ int bme680_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const *chan,
 int bme680_read_data(struct bme680_data *data, struct bme680_fifo_data *fdata);
 int bme680_read_calib(struct bme680_data *data);
 
+<<<<<<< HEAD
 #endif /* _BME680_H_ */
+=======
+#endif /* _BME680_H_ */
+>>>>>>> 118756714b84fee6678b770077b3fa8a0ea4dab6
