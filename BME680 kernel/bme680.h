@@ -1,17 +1,17 @@
-#ifndef __BME680_H__
-#define __BME680_H__
+#ifndef _BME680_H_
+#define _BME680_H_
 
+#include <linux/bitfield.h>
 #include <linux/types.h>
-#include <linux/i2c.h>
-#include <linux/spi/spi.h>
 #include <linux/regmap.h>
 #include <linux/iio/iio.h>
 #include <linux/kfifo.h>
 #include <linux/semaphore.h>
 #include <linux/wait.h>
 #include <linux/kthread.h>
+#include <linux/i2c.h>
+#include <linux/spi/spi.h>
 
-/* Enums từ files gốc */
 typedef enum {
     BME680_BOOL_FALSE = 0,
     BME680_BOOL_TRUE  = 1,
@@ -42,7 +42,6 @@ typedef enum {
     BME680_FILTER_COEFF_127 = 7,
 } bme680_filter_t;
 
-/* Register definitions */
 #define BME680_REG_CHIP_ID          0xD0
 #define BME680_REG_RESET            0xE0
 #define BME680_REG_STATUS           0x73
@@ -55,16 +54,45 @@ typedef enum {
 #define BME680_REG_RES_HEAT_0       0x5A
 #define BME680_REG_IDAC_HEAT_0      0x50
 #define BME680_REG_TEMP_MSB         0x22
+#define BME680_REG_TEMP_LSB         0x23
+#define BME680_REG_TEMP_XLSB        0x24
 #define BME680_REG_PRESS_MSB        0x1F
+#define BME680_REG_PRESS_LSB        0x20
+#define BME680_REG_PRESS_XLSB       0x21
 #define BME680_REG_HUM_MSB          0x25
+#define BME680_REG_HUM_LSB          0x26
 #define BME680_REG_GAS_R_MSB        0x2A
+#define BME680_REG_GAS_R_LSB        0x2B
 #define BME680_REG_MEAS_STAT_0      0x1D
+#define BME680_REG_CALIB_0          0x89
+#define BME680_REG_CALIB_1          0xE1
 #define BME680_CMD_SOFTRESET        0xB6
 #define BME680_CHIP_ID_VAL          0x61
 #define BME680_GAS_MEAS_BIT         BIT(5)
 #define BME680_GAS_STAB_BIT         BIT(4)
+#define BME680_NEW_DATA_MSK         BIT(7)
+#define BME680_GAS_MEASURING_MSK    BIT(6)
 
-/* Calibration struct */
+#define BME680_OSRS_T_MSK           GENMASK(7, 5)
+#define BME680_OSRS_P_MSK           GENMASK(4, 2)
+#define BME680_OSRS_H_MSK           GENMASK(7, 5)
+#define BME680_FILTER_MSK           GENMASK(4, 2)
+#define BME680_MODE_MSK             GENMASK(1, 0)
+#define BME680_GAS_PROFILE_MSK      GENMASK(3, 0)
+#define BME680_RUN_GAS_MSK          BIT(4)
+#define BME680_NB_CONV_MSK          GENMASK(3, 0)
+#define BME680_OSRS_T_SFT           5
+#define BME680_OSRS_P_SFT           2
+#define BME680_OSRS_H_SFT           5
+#define BME680_FILTER_SFT           2
+
+#define BME680_FIELD_DATA_SIZE      15
+#define BME680_MAX_HEATER_TEMP      400
+#define BME680_MIN_HEATER_TEMP      200
+#define BME680_MAX_OVERSAMPLING     BME680_OVERSAMPLING_X16
+#define BME680_MAX_FILTER           BME680_FILTER_COEFF_127
+#define BME680_MAX_GAS_PROFILE      10
+
 struct bme680_calib {
     u16 par_t1;
     s16 par_t2;
@@ -94,29 +122,50 @@ struct bme680_calib {
     s8  range_sw_err;
 };
 
-/* FIFO data struct cho IPC */
-struct bme680_fifo_data {
-    s64 timestamp;
-    s32 temperature;  // micro °C
-    u32 pressure;     // Pa * 1000
-    u32 humidity;     // % * 1000
-    u32 gas_resistance; // Ohms
+struct bme680_field_data {
+    s32 temperature;
+    u32 pressure;
+    u32 humidity;
+    u32 gas_resistance;
+    u8  gas_range;
+    bool heat_stable;
 };
 
-/* Driver data struct (nâng cấp) */
+struct bme680_fifo_data {
+    s64 timestamp;
+    s32 temperature;
+    u32 pressure;
+    u32 humidity;
+    u32 gas_resistance;
+};
+
+struct bme680_gas_config {
+    u16 heater_temp;
+    u16 heater_dur;
+    u8  preheat_curr_ma;
+};
+
+static const u8 bme680_lookup_k1_range[] = {
+    0, 0, 0, 0, 43, 68, 85, 100, 100, 100, 99, 91, 83, 72, 59, 44
+};
+
+static const u8 bme680_lookup_k2_range[] = {
+    0, 0, 0, 0, 86, 86, 85, 84, 80, 75, 68, 59, 47, 35, 21, 0
+};
+
 struct bme680_data {
     struct iio_dev *indio_dev;
     struct regmap *regmap;
     struct bme680_calib calib;
-    struct mutex lock;  // Thread sync
-    spinlock_t reg_lock; // Atomic register access
-    wait_queue_head_t wait_data; // Blocking read
-    DECLARE_KFIFO(data_fifo, struct bme680_fifo_data, 64); // FIFO IPC
-    struct semaphore fifo_sem; // FIFO sync
-    struct task_struct *poll_thread; // Kthread
+    struct mutex lock;
+    spinlock_t reg_lock;
+    wait_queue_head_t wait_data;
+    DECLARE_KFIFO(data_fifo, struct bme680_fifo_data, 64);
+    struct semaphore fifo_sem;
+    struct task_struct *poll_thread;
     atomic_t read_count;
     atomic_t error_count;
-    unsigned long start_time; // Jiffies
+    unsigned long start_time;
     s32 t_fine;
     u8 oversampling_temp;
     u8 oversampling_press;
@@ -129,55 +178,93 @@ struct bme680_data {
     struct device *dev;
     struct pm_runtime_data *pm_data;
     struct dentry *debugfs_dir;
-    void *shm_buffer; // Shared memory
+    void *shm_buffer;
     size_t shm_size;
+    u8 chip_id;
+    u8 heater_profile_len;
+    u16 heater_dur_profile[10];
+    u16 heater_temp_profile[10];
+    u8 heater_res[10];
+    u8 heater_idac[10];
 };
 
-/* Ioctl commands */
 #define BME680_IOC_MAGIC 'B'
 #define BME680_IOC_SET_GAS_CONFIG _IOW(BME680_IOC_MAGIC, 1, struct bme680_gas_config)
 #define BME680_IOC_READ_FIFO _IOR(BME680_IOC_MAGIC, 2, struct bme680_fifo_data)
 #define BME680_IOC_GET_SHM _IOR(BME680_IOC_MAGIC, 3, unsigned long)
 
-/* Gas config struct */
-struct bme680_gas_config {
-    u16 heater_temp; // °C
-    u16 heater_dur;  // ms
-    u8  preheat_curr_ma; // mA
-};
-
-/* IIO Channels */
 static const struct iio_chan_spec bme680_channels[] = {
     {
         .type = IIO_TEMP,
         .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED) | BIT(IIO_CHAN_INFO_RAW),
         .scan_index = 0,
-        .scan_type = { .sign = 's', .realbits = 20, .storagebits = 32, .endianness = IIO_BE },
+        .scan_type = {
+            .sign = 's',
+            .realbits = 20,
+            .storagebits = 32,
+            .endianness = IIO_BE,
+        },
     },
     {
         .type = IIO_PRESSURE,
         .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED) | BIT(IIO_CHAN_INFO_RAW),
         .scan_index = 1,
-        .scan_type = { .sign = 'u', .realbits = 20, .storagebits = 32, .endianness = IIO_BE },
+        .scan_type = {
+            .sign = 'u',
+            .realbits = 20,
+            .storagebits = 32,
+            .endianness = IIO_BE,
+        },
     },
     {
         .type = IIO_HUMIDITYRELATIVE,
         .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED) | BIT(IIO_CHAN_INFO_RAW),
         .scan_index = 2,
-        .scan_type = { .sign = 'u', .realbits = 16, .storagebits = 16, .endianness = IIO_CPU },
+        .scan_type = {
+            .sign = 'u',
+            .realbits = 16,
+            .storagebits = 16,
+            .endianness = IIO_CPU,
+        },
     },
     {
         .type = IIO_RESISTANCE,
         .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED) | BIT(IIO_CHAN_INFO_RAW),
         .scan_index = 3,
-        .scan_type = { .sign = 'u', .realbits = 10, .storagebits = 16, .endianness = IIO_CPU },
-        .event_spec = {
-            .type = IIO_EV_TYPE_CHANGE,
-            .dir = IIO_EV_DIR_EITHER,
-            .mask_separate = BIT(0),
+        .scan_type = {
+            .sign = 'u',
+            .realbits = 10,
+            .storagebits = 16,
+            .endianness = IIO_CPU,
         },
+        .event_spec = {
+            {
+                .type = IIO_EV_TYPE_CHANGE,
+                .dir = IIO_EV_DIR_EITHER,
+                .mask_separate = BIT(IIO_EV_INFO_VALUE),
+            },
+        },
+        .num_event_specs = 1,
     },
     IIO_CHAN_SOFT_TIMESTAMP(4),
 };
 
-#endif /* __BME680_H__ */
+static const struct regmap_range bme680_volatile_ranges[] = {
+    {
+        .range_min = BME680_REG_MEAS_STAT_0,
+        .range_max = BME680_REG_GAS_R_LSB,
+    },
+};
+
+static const struct regmap_access_table bme680_volatile_table = {
+    .yes_ranges = bme680_volatile_ranges,
+    .n_yes_ranges = ARRAY_SIZE(bme680_volatile_ranges),
+};
+
+int bme680_core_probe(struct device *dev, struct regmap *regmap, const char *name, void *bus_data);
+int bme680_core_remove(struct device *dev);
+int bme680_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const *chan, int *val, int *val2, long mask);
+int bme680_read_data(struct bme680_data *data, struct bme680_fifo_data *fdata);
+int bme680_read_calib(struct bme680_data *data);
+
+#endif /* _BME680_H_ */

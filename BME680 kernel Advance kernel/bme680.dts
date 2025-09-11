@@ -1,0 +1,48 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2711"; /* Raspberry Pi 4B */
+
+    fragment@0 {
+        target = <&i2c1>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "okay";
+
+            bme680: sensor@76 {
+                compatible = "bosch,bme680";
+                reg = <0x76>; /* I2C address, change to 0x77 if ADO high */
+                bosch,heater-temp = <320>; /* Heater temperature (°C) */
+                bosch,heater-duration = <150>; /* Heater duration (ms) */
+                bosch,heater-current = <10>; /* Heater current (mA) */
+                power-gpios = <&gpio 18 1>; /* GPIO18, active-high */
+                debounce-delay-us = <100>; /* Debounce for power GPIO stability */
+                gas-threshold-ohms = <100000>; /* Threshold for events/alerts */
+                netlink-group = <1>; /* Netlink multicast group for alerts */
+                spi-max-frequency = <10000000>; /* For SPI mode */
+                status = "okay";
+            };
+        };
+    };
+
+    /* Ensure I2C1 is enabled; add SPI if needed */
+    &i2c1 {
+        status = "okay";
+    };
+
+    /* Optional SPI fragment */
+    fragment@1 {
+        target = <&spi1>;
+        __overlay__ {
+            status = "okay";
+            bme680_spi: bme680@0 {
+                compatible = "bosch,bme680";
+                reg = <0>;
+                spi-max-frequency = <10000000>;
+                status = "disabled"; /* Enable if using SPI */
+            };
+        };
+    };
+};
